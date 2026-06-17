@@ -1,0 +1,18 @@
+# 遥感植被物候提取 · 依赖
+# 安装: pip install -r requirements.txt
+# 导出走 ee.Image.getDownloadURL + requests (复用 rs-urban-monitor 方案), 不依赖 geemap。
+# GDAL 不直接使用, 栅格读写统一用 rasterio (自带 GDAL 绑定, Windows pip 可装)。
+
+earthengine-api>=0.1.300
+requests>=2.31
+numpy>=1.26
+scipy>=1.11
+rasterio>=1.3
+pymannkendall>=1.4
+matplotlib>=3.8
+pyyaml>=6.0
+tqdm>=4.66
+# 可选 (报告/统计增强):
+# seaborn>=0.13
+# pandas>=2.1
+# geopandas>=0.14

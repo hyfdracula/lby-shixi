@@ -1,0 +1,63 @@
+# ============================================================
+# 湖南 定稿配置 —— 与范本同研究区, 但分析/图表/参数独立 (不照抄)
+# 用法(不用向日葵, WARP 可一直开):
+#   python run_all.py -c config_hunan.yaml            # 下载+全分析
+#   python -m src.multi_source config_hunan.yaml       # 多源 LAI/GPP 分析
+# ============================================================
+
+roi:
+  name: hunan
+  bbox: [108.78, 24.64, 114.26, 30.12]   # [west, south, east, north]
+  boundary_shp: null
+  boundary_geojson: "./data_hunan/hunan_boundary.json"
+
+gee:
+  project: feisty-gateway-498706
+  key_file: "C:/Users/19161/Desktop/长征/feisty-gateway-498706-m2-1b9cc04e520c.json"
+
+date:
+  start: "2001-01-01"
+  end: "2020-12-31"
+  demo: false
+
+# 下载选项: 多源 + 分块保 500m
+download:
+  params: [ndvi, lai, gpp, lc]   # 多源 (NDVI + LAI + GPP + 植被类型)
+  ndvi_tiled: true                # true = 分块下载保留 500m 精度
+  ndvi_tiles: [3, 3]              # 3×3=9 块, 每块 500m×23波段 ≈ 34MB < 50MB (2×2 会超)
+
+data:
+  scale: 500
+  cadence: 16
+  products:
+    ndvi_evi: "MODIS/061/MOD13A2"
+    lai:      "MODIS/061/MOD15A2H"
+    gpp:      "MODIS/061/MOD17A2HGF"
+    lc:       "MODIS/061/MCD12Q1"
+
+preprocess:
+  sg_window: 5
+  sg_polyorder: 2
+  ndvi_min_valid: 0.05
+
+phenology:
+  threshold_ratio: 0.2
+
+trend:
+  alpha: 0.05
+  z_critical: 1.96
+  slope_threshold: 0.0005
+
+veg_reclass:
+  forest:     [1, 2, 3, 4, 5]
+  grassland:  [6, 7, 10]
+  cropland:   [12, 14]
+  wetland:    [11]
+
+paths:
+  data:    "./data_hunan"
+  outputs: "./outputs_hunan"
+  report:  "./report"
+
+viz:
+  style: bw
