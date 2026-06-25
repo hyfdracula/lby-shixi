@@ -1,7 +1,7 @@
 """用地理要素(经纬度轴+指北针+比例尺+研究区边界高亮)重出关键空间图。
 
-读 outputs[_hunan] 的 tif (含 transform), 不联网。
-用法: python make_geo_figs.py config_hunan.yaml
+读 outputs 的 tif (含 transform), 不联网。
+用法: python make_geo_figs.py config.yaml
 """
 from __future__ import annotations
 
@@ -15,10 +15,12 @@ from src.utils import load_config, load_tif
 
 
 def main() -> None:
-    cfg = load_config(sys.argv[1] if len(sys.argv) > 1 else "config_hunan.yaml")
+    cfg = load_config(sys.argv[1] if len(sys.argv) > 1 else "config.yaml")
     out = Path(cfg["paths"]["outputs"])
     geo = out / "geo"
     geo.mkdir(parents=True, exist_ok=True)
+    from src import viz
+    viz.set_style(cfg.get("viz", {}).get("style", "bw"))
     boundary = cfg.get("roi", {}).get("boundary_geojson")  # 研究区边界 GeoJSON
 
     # NDVI 趋势空间 (分类)

@@ -1,33 +1,46 @@
-"""后处理串: 多源分析 + 补图 + 地理要素图 + 统计, 一次性跑完 (用 500m 新结果)。
+"""Run optional post-processing steps after the main pipeline."""
+from __future__ import annotations
 
-用法(任意 cwd): python C:/Users/19161/Desktop/geo_phenology/post_process.py
-"""
+import argparse
 import os
 import runpy
 import sys
 import traceback
-
-os.chdir("C:/Users/19161/Desktop/geo_phenology")
-sys.path.insert(0, ".")
+from pathlib import Path
 
 STEPS = [
-    ("make_extra_figs.py", False),   # 补图(原始滤波/植被年际/趋势堆叠)
-    ("make_geo_figs.py", False),     # 地理要素空间图(指北针/比例尺/经纬度)
-    ("src.multi_source", True),      # 多源 LAI/GPP 趋势分析
-    ("report_stats.py", False),      # NDVI 趋势/物候统计(500m 新值)
-    ("report_stats2.py", False),     # 三阶段/空间分位数/植被物候(500m 新值)
+    ("make_extra_figs.py", False),
+    ("make_geo_figs.py", False),
+    ("src.multi_source", True),
+    ("report_stats.py", False),
+    ("report_stats2.py", False),
+    ("build_handoff.py", False),  # 第一阶段数据包产出(图+data+专业文本, 供写作 skill)
 ]
 
-for target, is_module in STEPS:
-    sys.argv = ["x", "config_hunan.yaml"]
-    print(f"\n========== {target} ==========", flush=True)
-    try:
-        if is_module:
-            runpy.run_module(target, run_name="__main__")
-        else:
-            runpy.run_path(target, run_name="__main__")
-    except Exception:  # noqa: BLE001
-        print(f"!! {target} FAILED:", flush=True)
-        traceback.print_exc()
 
-print("\n========== POST PROCESS DONE ==========", flush=True)
+def main() -> None:
+    parser = argparse.ArgumentParser(description="多源分析、补图、地理要素图和统计后处理")
+    parser.add_argument("-c", "--config", default="config.yaml", help="配置文件路径")
+    args = parser.parse_args()
+
+    project_root = Path(__file__).resolve().parent
+    os.chdir(project_root)
+    sys.path.insert(0, str(project_root))
+
+    for target, is_module in STEPS:
+        sys.argv = ["x", args.config]
+        print(f"\n========== {target} ==========", flush=True)
+        try:
+            if is_module:
+                runpy.run_module(target, run_name="__main__")
+            else:
+                runpy.run_path(target, run_name="__main__")
+        except Exception:  # noqa: BLE001
+            print(f"!! {target} FAILED:", flush=True)
+            traceback.print_exc()
+
+    print("\n========== POST PROCESS DONE ==========", flush=True)
+
+
+if __name__ == "__main__":
+    main()

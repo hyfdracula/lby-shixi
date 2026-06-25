@@ -5,3 +5,9 @@ __pycache__/
 *.key
 .env
 .DS_Store
+
+# smoke test 本地产物 (脚本本身 config.smoke.yaml/smoke_test.py 保留, 只排运行产物)
+.smoke-packages/
+templates/data/
+templates/outputs/
+templates/report/smoke_report.md

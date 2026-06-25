@@ -2,12 +2,12 @@
 
 LAI/GPP 多源只看区域年均年际趋势(不做逐像元物候), 故跳过 SG 平滑
 (LAI/GPP 数据空洞多, sg_smooth 遇全 NaN 像元报错; 区域年均用 nanmean 忽略)。
-用法(独立跑): python -m src.multi_source config_hunan.yaml
+用法(独立跑): python -m src.multi_source -c config.yaml
 """
 from __future__ import annotations
 
+import argparse
 import logging
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 def run_multi_source(cfg: dict[str, Any], params: tuple[str, ...] = ("lai", "gpp")) -> dict:
     years = years_in_range(cfg)
+    viz.set_style(cfg.get("viz", {}).get("style", "bw"))
     data = Path(cfg["paths"]["data"])
     out = Path(cfg["paths"]["outputs"]) / "multi"
     out.mkdir(parents=True, exist_ok=True)
@@ -33,7 +34,7 @@ def run_multi_source(cfg: dict[str, Any], params: tuple[str, ...] = ("lai", "gpp
         for y in years:
             arr, _ = load_stack(str(data / param / f"{y}.tif"))
             series.append(float(np.nanmean(yearly_mean(arr))))
-        ylabel = {"lai": "LAI (m²/m²)", "gpp": "GPP (gC/m²/16d)"}.get(param, param.upper())
+        ylabel = {"lai": "LAI (m²/m²)", "gpp": "GPP (gC/m²/16d)", "evi": "EVI", "sif": "SIF (mW/m²/sr/nm)"}.get(param, param.upper())
         viz.plot_yearly_trend(years, series, f"{param.upper()} 区域年均年际变化",
                               str(out / f"{param}_yearly.png"), ylabel=ylabel)
         slope = float(np.polyfit(years, series, 1)[0])
@@ -74,10 +75,19 @@ def _plot_multi_compare(years, series_dict, out):
     viz._save(fig, out)
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="多源 LAI/GPP 区域年际趋势分析")
+    parser.add_argument("config_pos", nargs="?", help="配置文件路径")
+    parser.add_argument("-c", "--config", default=None, help="配置文件路径")
+    parser.add_argument("--params", nargs="*", default=["lai", "gpp"], help="要分析的参数, 默认 lai gpp")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    cfg = load_config(sys.argv[1] if len(sys.argv) > 1 else "config_hunan.yaml")
+    args = _parse_args()
+    cfg = load_config(args.config or args.config_pos or "config.yaml")
     if cfg["date"].get("demo"):
         end_year = int(str(cfg["date"]["end"])[:4])
         cfg["date"]["start"] = f"{end_year - 2}-01-01"
-    run_multi_source(cfg)
+    run_multi_source(cfg, params=tuple(args.params))

@@ -1,5 +1,6 @@
-# 遥感植被物候提取 · 依赖
+﻿# 遥感植被物候提取 · 依赖
 # 安装: pip install -r requirements.txt
+# 最终 DOCX 由 report_docx_builder.py 生成; pandoc 不再是 DOCX 必需依赖。
 # 导出走 ee.Image.getDownloadURL + requests (复用 rs-urban-monitor 方案), 不依赖 geemap。
 # GDAL 不直接使用, 栅格读写统一用 rasterio (自带 GDAL 绑定, Windows pip 可装)。
 
@@ -12,6 +13,8 @@ pymannkendall>=1.4
 matplotlib>=3.8
 pyyaml>=6.0
 tqdm>=4.66
+python-docx>=1.1            # 报告: DOCX 生成
+pillow>=10.0                # 报告: 读取图片尺寸并按比例限宽限高
 # 可选 (报告/统计增强):
 # seaborn>=0.13
 # pandas>=2.1

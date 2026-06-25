@@ -1,60 +1,24 @@
-# 报告结构风格(intake 第 15 问)
+# 报告风格(单一)
 
-按用户选的风格套对应结构生成报告。数值全部来自真实结果, 不伪造。
+本 skill 只产出**一种**报告风格: 课程实习报告。正文由第二阶段 CC 按 stage2-writing-guide.md 深度写作产出, 封面固定北林实习格式。不再支持 nature/学报等多风格分支。
 
-## A. Nature 期刊风(参考 nature-writing skill)
+## 封面(固定, 不随风格变)
 
-精炼、结论前置、强 narrative。结构:
-- 标题(信息量大、不夸大)
-- 摘要: context → gap → approach → key result → implication → boundary
-- 引言: 大背景 → 知识空白 → 本文贡献(一句话 argument)
-- 结果: 按图叙事, 每段一论点, claim 紧贴 evidence
-- 讨论: 意义 + 局限 + 展望
-- 方法: 简洁, 放后
-- 动词校准: show/demonstrate/suggest/indicate/may/could
+北林 logo(`report/assets/bilin_logo.png`) 居中 + 楷体 24pt 标题"基于遥感植被参数的植被物候期提取" + 副标"——以{roi}为例" + 信息栏(学院/班级/学号/姓名/指导教师) + 日期"YYYY 年 M 月 D 日"。
+python-docx 精确居中 + `w:eastAsia` 字体设置(楷体标题/宋体信息栏), 避免中文回落默认字体。
 
-适合: 想冲英文期刊味、精炼。
+## 正文
 
-## B. PaperSpine 学术编排(参考 paper-spine skill)
+- **来源**: 第二阶段 CC 按 stage2-writing-guide.md 从 `handoff/` 数据包(methods/study_area/results_summary/core_claims/captions/code_snippets)产出的 `report_draft.md`
+- **排版**: `report_docx_builder.py` 把 md 转成 docx —— 表格原样、图组最多 2 张一排、图注 Caption 样式、`##/###/####` 映射 Heading 1/2/3、核心代码节读 code_snippets.md
+- **数值**: 全部来自 GEE 真实下载与计算(`outputs/report_stats.json`), 报告不伪造
 
-完整 IMRaD + motivation 确认 + writing rationale matrix。结构:
-- motivation(用户确认的核心论点)
-- 引言 / 相关工作 / 方法 / 结果 / 讨论 / 结论
-- 每段有 rationale(为什么这么写)
-- 含 citation support bank
-适合: 严谨学术论文、毕业论文级。
+## 输出格式
 
-## C. 中文学报风(生态学报/地理学报范式)
+- `docx`(默认, `report_docx_builder.py`)
+- `md`(copy `report_draft.md`)
+- `pdf`: **不支持**(如需 PDF, 用户自行用 Word/WPS/LibreOffice 打开 docx 导出)
 
-中文规范、方法详尽、重数据表格。结构:
-- 摘要(中文+英文) / 关键词
-- 引言(研究背景+空白+本文目的)
-- 研究区与数据(详, 含研究区图、数据表)
-- 研究方法(详, 含公式、流程图、分类表)
-- 结果与分析(逐图逐表, 分类型对比)
-- 讨论(机制+对比他人+局限)
-- 结论(分点)
-- 参考文献(中文为主+英文)
-适合: 投中文生态/地理学报、课程高分。
+## 字数规范
 
-## D. 课程实习报告(贴合任务书, 默认)
-
-流程为主、图文并茂、贴合任务书 5 天。结构:
-- 封面(北林logo+居中信息)
-- 一、项目简介(背景+目标)
-- 二、数据与方法(技术栈+数据表+方法+IGBP表+趋势等级表)
-- 三、实验步骤(对应5天)
-- 四、结果分析(4.1 NDVI趋势/4.2 物候空间/4.3 物候趋势/4.4 多源/4.5 结论)
-- 五、讨论与展望(可选)
-- 六、核心代码(6模块贴附)
-- 七、参考文献
-适合: 实习交作业(本 skill 默认)。
-
-## E. 自由混搭
-
-用户描述, CC 定制。
-
-## 封面(所有风格统一)
-
-北林 logo(assets/bilin_logo.png) 居中 + 居中标题 + 居中信息(地信23/林学院/梁博毅固定 + 姓名/学号) + 日期。
-python-docx 精确居中(pandoc 居中弱)。
+正文总字数目标 12000 中文字(Word 字数口径)。`build_handoff.py` 将目标 + 4.2.2 按 SOS/EOS/Peak 三子节展开等 special_requirements 写入 handoff/handoff_meta.json, CC 据此产足够厚度的初稿。

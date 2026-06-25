@@ -111,7 +111,7 @@ def export_image_tiled(img: ee.Image, bbox: list[float], out_path: str,
                                    west + (i + 1) * dx, south + (j + 1) * dy)
             tmp = str(tmp_dir / f"tile_{i}_{j}.tif")
             logger.info("分块 [%d,%d] @ %dm (force) ...", i, j, base_scale)
-            export_image(img, sub, tmp, base_scale=base_scale, force_scale=base_scale)
+            export_image(img, sub, tmp, base_scale=base_scale, force_scale=base_scale)  # force_scale 保 500m; 已知局限: GEE 投影变换实际分辨率可能微偏, 严格需核验
             pieces.append(tmp)
 
     srcs = [rasterio.open(p) for p in pieces]
@@ -150,6 +150,19 @@ def export_ndvi_year(cfg, year, region, tiled: bool = False) -> str:
     return export_image(img, region, out, base_scale=cfg["data"]["scale"])
 
 
+def export_evi_year(cfg, year, region, tiled: bool = False) -> str:
+    """MOD13A2 EVI (与 NDVI 同 16 天产品, 波段 EVI, ×0.0001) -> data/evi/{year}.tif。"""
+    col = (ee.ImageCollection("MODIS/061/MOD13A2")
+           .filterDate(f"{year}-01-01", f"{int(year)+1}-01-01").select("EVI"))
+    n = col.size().getInfo()
+    img = col.toBands().multiply(0.0001).rename([_band_name(i) for i in range(n)])
+    out = str(Path(cfg["paths"]["data"]) / "evi" / f"{year}.tif")
+    if tiled:
+        tiles = tuple(cfg.get("download", {}).get("ndvi_tiles", [3, 3]))
+        return export_image_tiled(img, list(cfg["roi"]["bbox"]), out, cfg["data"]["scale"], tiles)
+    return export_image(img, region, out, base_scale=cfg["data"]["scale"])
+
+
 def export_lai_year(cfg, year, region) -> str:
     """MOD15A2H LAI (8天, 波段 Lai_500m) -> 16天均值合成 (约23期), 已 ×0.1。"""
     start = ee.Date(f"{year}-01-01")
@@ -178,6 +191,24 @@ def export_gpp_year(cfg, year, region) -> str:
     return export_image(img, region, out, base_scale=cfg["data"]["scale"])
 
 
+def export_sif_year(cfg, year, region) -> str | None:
+    """SIF (日光荧光) 导出。MODIS 体系无 SIF, 用 config.data.products.sif 指定的 GEE asset
+    (如 TROPOMI SIF / CSIF Tao2025)。asset 未配置或不可访问时跳过 + 提示。"""
+    sif_asset = (cfg.get("data", {}).get("products", {}) or {}).get("sif")
+    if not sif_asset:
+        logger.warning("SIF 未配置 asset (config.data.products.sif, 如 TROPOMI/CSIF); 跳过 SIF 导出")
+        return None
+    col = (ee.ImageCollection(sif_asset)
+           .filterDate(f"{year}-01-01", f"{int(year)+1}-01-01"))
+    n = col.size().getInfo()
+    if not n:
+        logger.warning("SIF asset %s 在 %d 年无数据; 跳过", sif_asset, year)
+        return None
+    img = col.mean()
+    out = str(Path(cfg["paths"]["data"]) / "sif" / f"{year}.tif")
+    return export_image(img, region, out, base_scale=cfg["data"]["scale"])
+
+
 def export_landcover(cfg, year, region) -> str:
     img = (ee.ImageCollection("MODIS/061/MCD12Q1").filterDate(f"{year}-01-01", f"{int(year)+1}-01-01")
            .first().select("LC_Type1"))
@@ -194,10 +225,14 @@ def download_all(cfg, params=("ndvi", "lc"), ndvi_tiled: bool = False) -> None:
     for y in years:
         if "ndvi" in params:
             export_ndvi_year(cfg, y, region, tiled=ndvi_tiled)
+        if "evi" in params:
+            export_evi_year(cfg, y, region, tiled=ndvi_tiled)
         if "lai" in params:
             export_lai_year(cfg, y, region)
         if "gpp" in params:
             export_gpp_year(cfg, y, region)
+        if "sif" in params:
+            export_sif_year(cfg, y, region)
     if "lc" in params:
         export_landcover(cfg, years[-1], region)
     logger.info("下载完成: years=%s params=%s ndvi_tiled=%s", years, params, ndvi_tiled)

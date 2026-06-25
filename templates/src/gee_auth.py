@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import argparse
 from pathlib import Path
 from typing import Any
 
@@ -65,4 +66,7 @@ def check_connection(cfg: dict[str, Any] | None = None) -> bool:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    raise SystemExit(0 if check_connection() else 1)
+    parser = argparse.ArgumentParser(description="测试 GEE service-account 连通性")
+    parser.add_argument("-c", "--config", default="config.yaml", help="配置文件路径")
+    args = parser.parse_args()
+    raise SystemExit(0 if check_connection(load_config(args.config)) else 1)

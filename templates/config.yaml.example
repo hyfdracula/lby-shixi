@@ -1,19 +1,32 @@
 # ============================================================
-# 湖南 定稿配置 —— 与范本同研究区, 但分析/图表/参数独立 (不照抄)
-# 用法(不用向日葵, WARP 可一直开):
-#   python run_all.py -c config_hunan.yaml            # 下载+全分析
-#   python -m src.multi_source config_hunan.yaml       # 多源 LAI/GPP 分析
+# 遥感植被物候提取配置样例
+# 复制为 config.yaml 后按 intake 结果修改。
+#
+# 常用命令:
+#   python -m src.gee_auth -c config.yaml
+#   python run_all.py -c config.yaml
+#   python -m src.multi_source -c config.yaml
+#   python build_handoff.py -c config.yaml
+#   # 第二阶段由 CC 按 references/stage2-writing-guide.md 写 paper_rewriting_output/report_draft.md
+#   python report_docx_builder.py --project-root . --output report_final.docx --final
 # ============================================================
 
 roi:
-  name: hunan
-  bbox: [108.78, 24.64, 114.26, 30.12]   # [west, south, east, north]
+  name: example_region
+  bbox: [115.42, 39.45, 117.50, 41.07]   # [west, south, east, north]
   boundary_shp: null
-  boundary_geojson: "./data_hunan/hunan_boundary.json"
+  boundary_geojson: null
 
 gee:
-  project: feisty-gateway-498706
-  key_file: "C:/Users/19161/Desktop/长征/feisty-gateway-498706-m2-1b9cc04e520c.json"
+  key_file: ""   # 填用户本机 service-account JSON 绝对路径; 不提交 git
+
+course:
+  college: 林学院
+  class_name: 地信23
+  student_id: ""
+  student_name: ""
+  instructor: 梁博毅
+  deadline: ""
 
 date:
   start: "2001-01-01"
@@ -22,9 +35,9 @@ date:
 
 # 下载选项: 多源 + 分块保 500m
 download:
-  params: [ndvi, lai, gpp, lc]   # 多源 (NDVI + LAI + GPP + 植被类型)
-  ndvi_tiled: true                # true = 分块下载保留 500m 精度
-  ndvi_tiles: [3, 3]              # 3×3=9 块, 每块 500m×23波段 ≈ 34MB < 50MB (2×2 会超)
+  params: [ndvi, lai, gpp, lc]
+  ndvi_tiled: true
+  ndvi_tiles: [3, 3]
 
 data:
   scale: 500
@@ -34,6 +47,7 @@ data:
     lai:      "MODIS/061/MOD15A2H"
     gpp:      "MODIS/061/MOD17A2HGF"
     lc:       "MODIS/061/MCD12Q1"
+    sif:      null # 可选: SIF GEE asset(TROPOMI/CSIF Tao2025), null 跳过; MODIS 体系无 SIF
 
 preprocess:
   sg_window: 5
@@ -41,23 +55,38 @@ preprocess:
   ndvi_min_valid: 0.05
 
 phenology:
+  method: dynamic   # dynamic(默认, 动态阈值向量化快) / double_logistic(双逻辑斯蒂 curve_fit, 慢)
   threshold_ratio: 0.2
+  evergreen_thr: 0.1   # 年内振幅<此值的常绿/水体/裸地像元 SOS/EOS 置 NaN(动态阈值在常绿区失效, 如广西常绿林)
 
 trend:
+  method: sen_mk   # sen_mk(默认, Sen+MK 非参数) / linear(最小二乘线性回归)
   alpha: 0.05
   z_critical: 1.96
-  slope_threshold: 0.0005
+  slope_threshold: 0.0005        # NDVI 趋势斜率阈值(NDVI/yr)
+  pheno_slope_threshold: 0.5     # 物候趋势斜率阈值(DOY/yr, 量级不同于 NDVI; 用 NDVI 的 0.0005 会导致 98% 无变化)
 
 veg_reclass:
   forest:     [1, 2, 3, 4, 5]
   grassland:  [6, 7, 10]
   cropland:   [12, 14]
   wetland:    [11]
+  non_veg:    [15, 17] # 雪冰/水体: 保持 0 背景, 不进入植被统计
+
+analysis:
+  by_veg: true   # true=按植被分类出图(默认, 需下载 lc); false=只全区整体趋势(不下 lc, 不分类)
+  tier: 100      # 任务书档位: 100=全(NDVI趋势+物候+物候趋势); 70=仅 NDVI 趋势(跳物候)
 
 paths:
-  data:    "./data_hunan"
-  outputs: "./outputs_hunan"
+  data:    "./data"
+  outputs: "./outputs"
   report:  "./report"
+  handoff: "./handoff"   # 第一阶段数据包(图+数据+专业文本), 供第二阶段 CC 写作
 
 viz:
   style: bw
+
+report:
+  format: markdown
+  style: course
+  output_basename: phenology_report
