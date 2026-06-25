@@ -164,28 +164,38 @@ def export_evi_year(cfg, year, region, tiled: bool = False) -> str:
 
 
 def export_lai_year(cfg, year, region) -> str:
-    """MOD15A2H LAI (8天, 波段 Lai_500m) -> 16天均值合成 (约23期), 已 ×0.1。"""
+    """MOD15A2H LAI (8天, 波段 Lai_500m) -> 16天均值合成 (约23期), 已 ×0.1。
+
+    空周期(8天产品滞后/缺失)填 NODATA 常数, 避免 Image.cat 报错中断全年下载。
+    """
     start = ee.Date(f"{year}-01-01")
     periods = []
     for k in range(23):
         s = start.advance(k * 16, "day"); e = s.advance(16, "day")
-        m = (ee.ImageCollection("MODIS/061/MOD15A2H").filterDate(s, e)
-             .select("Lai_500m").mean().multiply(0.1))
-        periods.append(m.rename(_band_name(k)))
+        col = ee.ImageCollection("MODIS/061/MOD15A2H").filterDate(s, e).select("Lai_500m")
+        m = ee.Image(ee.Algorithms.If(col.size().gt(0),
+                                      col.mean().multiply(0.1),
+                                      ee.Image.constant(NODATA))).rename(_band_name(k))
+        periods.append(m)
     img = ee.Image.cat(periods)
     out = str(Path(cfg["paths"]["data"]) / "lai" / f"{year}.tif")
     return export_image(img, region, out, base_scale=cfg["data"]["scale"])
 
 
 def export_gpp_year(cfg, year, region) -> str:
-    """MOD17A2HGF GPP (8天, 波段 Gpp) -> 16天均值合成 (约23期), 已 ×0.1。"""
+    """MOD17A2HGF GPP (8天, 波段 Gpp) -> 16天均值合成 (约23期), 已 ×0.1。
+
+    空周期(8天产品滞后/缺失)填 NODATA 常数, 避免 Image.cat 报错中断全年下载。
+    """
     start = ee.Date(f"{year}-01-01")
     periods = []
     for k in range(23):
         s = start.advance(k * 16, "day"); e = s.advance(16, "day")
-        m = (ee.ImageCollection("MODIS/061/MOD17A2HGF").filterDate(s, e)
-             .select("Gpp").mean().multiply(0.1))
-        periods.append(m.rename(_band_name(k)))
+        col = ee.ImageCollection("MODIS/061/MOD17A2HGF").filterDate(s, e).select("Gpp")
+        m = ee.Image(ee.Algorithms.If(col.size().gt(0),
+                                      col.mean().multiply(0.1),
+                                      ee.Image.constant(NODATA))).rename(_band_name(k))
+        periods.append(m)
     img = ee.Image.cat(periods)
     out = str(Path(cfg["paths"]["data"]) / "gpp" / f"{year}.tif")
     return export_image(img, region, out, base_scale=cfg["data"]["scale"])
@@ -216,26 +226,70 @@ def export_landcover(cfg, year, region) -> str:
     return export_image(img, region, out, base_scale=cfg["data"]["scale"])
 
 
+def _download_year(cfg, year, region, params, ndvi_tiled):
+    """单年多参数下载（并行任务单元）。各参数独立 try，一个失败不影响其他。"""
+    done = {}
+    for p in params:
+        try:
+            if p == "ndvi":
+                done["ndvi"] = export_ndvi_year(cfg, year, region, tiled=ndvi_tiled)
+            elif p == "evi":
+                done["evi"] = export_evi_year(cfg, year, region, tiled=ndvi_tiled)
+            elif p == "lai":
+                done["lai"] = export_lai_year(cfg, year, region)
+            elif p == "gpp":
+                done["gpp"] = export_gpp_year(cfg, year, region)
+            elif p == "sif":
+                done["sif"] = export_sif_year(cfg, year, region)
+        except Exception as e:  # noqa: BLE001
+            done[f"error_{p}"] = f"{type(e).__name__}: {e}"
+            logger.error("年 %d %s 下载失败: %s", year, p, e)
+    return year, done
+
+
 def download_all(cfg, params=("ndvi", "lc"), ndvi_tiled: bool = False) -> None:
-    """主下载入口。params: 子集 ('ndvi','lai','gpp','lc'); ndvi_tiled=True 大区域保500m。"""
+    """主下载入口。params: 子集 ('ndvi','lai','gpp','lc'); ndvi_tiled=True 大区域保500m。
+
+    并行: config.download.parallel (默认 true) 跨年 ThreadPoolExecutor 并行;
+          config.download.max_workers (默认 6, GEE IP 限流建议 ≤8);
+          parallel=false 回退原串行。同年内各参数仍串行(避免 GEE 服务端构建竞争)。
+    """
     ensure_dirs(cfg)
     init_gee(cfg)
     region = build_roi(cfg)
     years = years_in_range(cfg)
-    for y in years:
-        if "ndvi" in params:
-            export_ndvi_year(cfg, y, region, tiled=ndvi_tiled)
-        if "evi" in params:
-            export_evi_year(cfg, y, region, tiled=ndvi_tiled)
-        if "lai" in params:
-            export_lai_year(cfg, y, region)
-        if "gpp" in params:
-            export_gpp_year(cfg, y, region)
-        if "sif" in params:
-            export_sif_year(cfg, y, region)
+    yearly_params = tuple(p for p in params if p != "lc")  # lc 只下末年, 单独处理
+    dl_cfg = cfg.get("download", {})
+    parallel = dl_cfg.get("parallel", True)
+    max_workers = max(1, int(dl_cfg.get("max_workers", 6)))
+
+    if parallel and len(years) > 1 and yearly_params:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        logger.info("并行下载: years=%s params=%s max_workers=%d ndvi_tiled=%s",
+                    years, yearly_params, max_workers, ndvi_tiled)
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures = {ex.submit(_download_year, cfg, y, region, yearly_params, ndvi_tiled): y
+                       for y in years}
+            for fut in as_completed(futures):
+                y = futures[fut]
+                try:
+                    yr, res = fut.result()
+                    errs = [k for k in res if k.startswith("error_")]
+                    ok = [k for k in res if not k.startswith("error_")]
+                    if errs:
+                        logger.error("年 %d: 成功 %s / 失败 %s", yr, ok, errs)
+                    else:
+                        logger.info("年 %d 完成: %s", yr, ok)
+                except Exception as e:  # noqa: BLE001
+                    logger.error("年 %d 异常: %s", y, e)
+    else:
+        logger.info("串行下载: years=%s params=%s ndvi_tiled=%s", years, yearly_params, ndvi_tiled)
+        for y in years:
+            _download_year(cfg, y, region, yearly_params, ndvi_tiled)
+
     if "lc" in params:
         export_landcover(cfg, years[-1], region)
-    logger.info("下载完成: years=%s params=%s ndvi_tiled=%s", years, params, ndvi_tiled)
+    logger.info("下载完成: years=%s params=%s parallel=%s", years, params, parallel)
 
 
 if __name__ == "__main__":
