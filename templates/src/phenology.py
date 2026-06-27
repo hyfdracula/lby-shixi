@@ -18,17 +18,50 @@ from .utils import write_single_band, years_in_range
 logger = logging.getLogger(__name__)
 
 
-def extract_phenology_year(stack: np.ndarray, ratio: float = 0.2, evergreen_thr: float = 0.1):
-    """向量化提取单年 (T,H,W) -> (sos, eos, peak), 单位 DOY (期序号×16)。
+def _pchip_daily(stack: np.ndarray, n_days: int = 365) -> np.ndarray:
+    """PCHIP 插值 (T,H,W) -> (n_days,H,W), 向量化 (scipy PchipInterpolator axis=0)。
+
+    单调保形分段三次埃尔米特, 不会像三次样条那样过冲振荡, 适合 NDVI 时序。
+    NaN 像元: 沿时间轴填像元均值后插值(避免 PCHIP 崩溃), 全 NaN 像元恢复 NaN。
+    """
+    from scipy.interpolate import PchipInterpolator
+    T = stack.shape[0]
+    if T >= n_days:
+        return stack
+    x = np.arange(T, dtype=float)
+    x_new = np.linspace(0, T - 1, n_days)
+    allnan = np.isnan(stack).all(axis=0)
+    with np.errstate(invalid="ignore"):
+        mean = np.nanmean(stack, axis=0)
+    mean = np.where(np.isfinite(mean), mean, 0.0)
+    s = np.where(np.isnan(stack), mean[None, :, :], stack)
+    out = PchipInterpolator(x, s, axis=0)(x_new).astype(np.float32)
+    out[:, allnan] = np.nan
+    return out
+
+
+def extract_phenology_year(stack: np.ndarray, ratio: float = 0.2, evergreen_thr: float = 0.1,
+                           daily: bool = True):
+    """向量化提取单年 (T,H,W) -> (sos, eos, peak), 单位 DOY。
+
+    daily=True (默认): 先 PCHIP 插值到 365 天逐日, SOS/Peak/EOS 精确到**天**
+        (16天期→365天, 精度提升 16×; PCHIP 单调保形, 不过冲)。
+    daily=False: 16 天期精度 (argmax × 16, 旧行为)。
 
     evergreen_thr: 年内 NDVI 振幅(max-min) < 此值的像元视为常绿/水体/裸地,
-    SOS/EOS 置 NaN(动态阈值在常绿区失效: 全年高NDVI→阈值≈min→首达/末达误判为期首/期末,
-    典型表现 SOS≈DOY 16、EOS≈DOY 348、生长季≈336 天); Peak 保留(年内最大值期对常绿仍有意义)。
+    SOS/EOS 置 NaN(动态阈值在常绿区失效); Peak 保留(年内最大值期对常绿仍有意义)。
     """
     T, H, W = stack.shape
     allnan = np.isnan(stack).all(axis=0)  # (H,W) 全 NaN 像元
-    filled = np.where(np.isnan(stack), -np.inf, stack)
 
+    if daily and T < 365:
+        stack = _pchip_daily(stack, 365)  # (365, H, W) 逐日 PCHIP
+        T = 365
+        day_factor = 1   # idx 即 DOY (逐日)
+    else:
+        day_factor = 16  # 期 idx × 16 = DOY (16 天合成)
+
+    filled = np.where(np.isnan(stack), -np.inf, stack)
     mn = np.nanmin(stack, axis=0)
     mx = np.nanmax(stack, axis=0)
     amplitude = mx - mn                       # 年内振幅
@@ -38,13 +71,10 @@ def extract_phenology_year(stack: np.ndarray, ratio: float = 0.2, evergreen_thr:
     above = filled >= thr[None, :, :]  # (T,H,W)
     any_above = above.any(axis=0)
 
-    # Peak: 年内最大值期 (DOY≈期序号×16, MOD13A2 16天合成, 假设每年 23 期; 闰年/边界期数微偏)
-    peak = (np.argmax(filled, axis=0) * 16).astype(np.float32)
-    # SOS: 首次 >= 阈值 (春季绿返)
-    sos = (np.argmax(above, axis=0).astype(np.float32)) * 16
-    # EOS: 最后一次 >= 阈值 (秋季枯黄, 下降段离开阈值)
+    peak = (np.argmax(filled, axis=0).astype(np.float32) * day_factor)
+    sos = (np.argmax(above, axis=0).astype(np.float32) * day_factor)
     last = (T - 1) - np.argmax(above[::-1], axis=0)
-    eos = (last.astype(np.float32)) * 16
+    eos = (last.astype(np.float32) * day_factor)
 
     invalid = allnan | ~any_above | evergreen  # 常绿像元 SOS/EOS 无意义 → NaN
     sos[invalid] = np.nan

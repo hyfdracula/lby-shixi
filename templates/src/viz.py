@@ -147,36 +147,53 @@ def plot_raw_vs_smooth(raw, smooth, title, out, ylabel="NDVI") -> str:
     _save(fig, out); return out
 
 
-def plot_phenology_diagram(raw, smooth, sos_idx, peak_idx, eos_idx, ratio, out) -> str:
+def plot_phenology_diagram(raw, smooth, sos_idx, peak_idx, eos_idx, ratio, out, daily_interp=True) -> str:
+    """物候提取示意图: 原始NDVI点 + SG平滑曲线 + 动态阈值线 + SOS/Peak/EOS 标注。
+
+    daily_interp=True: SG平滑 PCHIP 插值到逐日(DOY 0-364), 平滑美观; x 轴 DOY;
+        SOS/Peak/EOS 标在 DOY (期idx×16)。
+    """
     apply_bw_style()
     fig, ax = plt.subplots(figsize=(9, 5))
-    t = np.arange(len(raw))
+    raw = np.asarray(raw); smooth = np.asarray(smooth)
+    T = len(smooth)
     raw_c = "lightgray" if _STYLE == "bw" else "#999999"
     sm_c = "black" if _STYLE == "bw" else _PALETTE[0]
-    ax.plot(t, np.asarray(raw), "o", color=raw_c, markersize=3, alpha=0.6, label="原始 NDVI")
-    ax.plot(t, np.asarray(smooth), "-", color=sm_c, linewidth=2.5, label="SG 滤波")
-    s = np.asarray(smooth)
-    mn, mx = np.nanmin(s), np.nanmax(s)
+    if daily_interp and T < 365:
+        from scipy.interpolate import PchipInterpolator
+        x = np.arange(T, dtype=float) * 16  # 期 DOY (0,16,...,352)
+        x_new = np.arange(365, dtype=float)  # 逐日 DOY 0-364
+        sm_d = PchipInterpolator(x, np.nan_to_num(smooth))(x_new)
+        ax.plot(x, np.nan_to_num(raw), "o", color=raw_c, markersize=3, alpha=0.5, label="原始 NDVI (16天合成)")
+        ax.plot(x_new, sm_d, "-", color=sm_c, linewidth=2.5, label="SG + PCHIP 逐日")
+        s_disp, t_disp = sm_d, x_new
+    else:
+        t_disp = np.arange(T); s_disp = smooth
+        ax.plot(t_disp, raw, "o", color=raw_c, markersize=3, alpha=0.6, label="原始 NDVI")
+        ax.plot(t_disp, smooth, "-", color=sm_c, linewidth=2.5, label="SG 滤波")
+    mn, mx = np.nanmin(smooth), np.nanmax(smooth)
     thr = mn + ratio * (mx - mn)
     thr_c = "black" if _STYLE == "bw" else _PALETTE[1]
     ax.axhline(y=thr, color=thr_c, linestyle=":", linewidth=1.8, alpha=0.8, label=f"动态阈值 α={ratio}")
+    def _doy(i):
+        return i * 16 if i is not None else None
     if _STYLE == "bw":
-        pts = [(sos_idx, "SOS", "o", -15), (peak_idx, "Peak", "^", 5), (eos_idx, "EOS", "v", -15)]
+        pts = [(_doy(sos_idx), "SOS", "o", -15), (_doy(peak_idx), "Peak", "^", 5), (_doy(eos_idx), "EOS", "v", -15)]
         for idx, label, marker, off in pts:
-            if idx is not None and 0 <= idx < len(smooth):
-                ax.plot(idx, smooth[idx], marker, color="black", markersize=11, zorder=5)
-                ax.annotate(f"{label}\nDOY≈{idx*16}", xy=(idx, smooth[idx]),
-                            xytext=(idx+3, smooth[idx]+off*0.001), fontsize=9, color="black",
+            if idx is not None and 0 <= int(idx) < len(s_disp):
+                ax.plot(idx, s_disp[int(idx)], marker, color="black", markersize=11, zorder=5)
+                ax.annotate(f"{label}\nDOY≈{idx:.0f}", xy=(idx, s_disp[int(idx)]),
+                            xytext=(idx + 12, s_disp[int(idx)] + off * 0.001), fontsize=9, color="black",
                             arrowprops=dict(arrowstyle="->", color="black", lw=1))
     else:
-        for idx, label, color, off in [(sos_idx, "SOS", _PALETTE[0], -15), (peak_idx, "Peak", _PALETTE[4], 5), (eos_idx, "EOS", _PALETTE[3], -15)]:
-            if idx is not None and 0 <= idx < len(smooth):
-                ax.plot(idx, smooth[idx], "o", color=color, markersize=11, zorder=5)
-                ax.annotate(f"{label}\nDOY≈{idx*16}", xy=(idx, smooth[idx]),
-                            xytext=(idx+3, smooth[idx]+off*0.001), fontsize=9, color=color,
+        for idx, label, color, off in [(_doy(sos_idx), "SOS", _PALETTE[0], -15), (_doy(peak_idx), "Peak", _PALETTE[4], 5), (_doy(eos_idx), "EOS", _PALETTE[3], -15)]:
+            if idx is not None and 0 <= int(idx) < len(s_disp):
+                ax.plot(idx, s_disp[int(idx)], "o", color=color, markersize=11, zorder=5)
+                ax.annotate(f"{label}\nDOY≈{idx:.0f}", xy=(idx, s_disp[int(idx)]),
+                            xytext=(idx + 12, s_disp[int(idx)] + off * 0.001), fontsize=9, color=color,
                             arrowprops=dict(arrowstyle="->", color=color, lw=1.2))
-    ax.set_xlabel("16 天期序号", fontsize=11); ax.set_ylabel("NDVI", fontsize=11)
-    _title(ax, "物候期提取示意图 (动态阈值法)")
+    ax.set_xlabel("DOY (天)", fontsize=11); ax.set_ylabel("NDVI", fontsize=11)
+    _title(ax, "物候期提取示意图 (动态阈值法 + PCHIP 逐日)")
     _legend_outside(ax, fontsize=9)
     _save(fig, out); return out
 
