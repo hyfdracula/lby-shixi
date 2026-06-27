@@ -27,7 +27,7 @@ def main() -> None:
         cfg["date"]["start"] = f"{end_year - 2}-01-01"
     years = years_in_range(cfg)
     from src import viz
-    viz.set_style(cfg.get("viz", {}).get("style", "bw"))
+    viz.set_style(cfg.get("viz", {}).get("style", "color"))
     ph = Path(cfg["paths"]["outputs"]) / "phenology"
 
     # 1) 均值空间图 (范本图7: 物候空间格局, 叠加研究区边界红色高亮)

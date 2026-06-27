@@ -20,7 +20,7 @@ def main() -> None:
     geo = out / "geo"
     geo.mkdir(parents=True, exist_ok=True)
     from src import viz
-    viz.set_style(cfg.get("viz", {}).get("style", "bw"))
+    viz.set_style(cfg.get("viz", {}).get("style", "color"))
     boundary = cfg.get("roi", {}).get("boundary_geojson")  # 研究区边界 GeoJSON
 
     # NDVI 趋势空间 (分类)
@@ -40,7 +40,7 @@ def main() -> None:
     for name in ["SOS", "EOS", "Peak"]:
         a, p = load_tif(str(out / "phenology_trend" / f"{name}_trend_class.tif"))
         viz.plot_spatial_geo(a, p["transform"], f"{name} 趋势空间分布",
-                             str(geo / f"{name}_spatial_geo.png"), levels=PHENO_LEVELS, boundary=boundary)
+                             str(geo / f"{name}_spatial_geo.png"), levels=PHENO_LEVELS, boundary=boundary, kind="pheno_trend")
         print(f"出 {name}_spatial_geo.png")
 
     print(f"地理要素图(含边界高亮)完成 -> {geo}")

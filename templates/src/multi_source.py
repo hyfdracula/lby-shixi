@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def run_multi_source(cfg: dict[str, Any], params: tuple[str, ...] = ("lai", "gpp")) -> dict:
     years = years_in_range(cfg)
-    viz.set_style(cfg.get("viz", {}).get("style", "bw"))
+    viz.set_style(cfg.get("viz", {}).get("style", "color"))
     data = Path(cfg["paths"]["data"])
     out = Path(cfg["paths"]["outputs"]) / "multi"
     out.mkdir(parents=True, exist_ok=True)

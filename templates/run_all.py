@@ -43,7 +43,7 @@ def main(cfg_path: str = "config.yaml", steps: list[str] | None = None) -> None:
     _apply_demo(cfg)
     ensure_dirs(cfg)
     from src import viz
-    viz.set_style(cfg.get("viz", {}).get("style", "bw"))
+    viz.set_style(cfg.get("viz", {}).get("style", "color"))
     years = years_in_range(cfg)
     steps = steps or list(ALL_STEPS)
     analysis = cfg.get("analysis") or {}

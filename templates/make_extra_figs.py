@@ -32,7 +32,7 @@ def main() -> None:
     out = Path(cfg["paths"]["outputs"])
     years = years_in_range(cfg)
     from src import viz
-    viz.set_style(cfg.get("viz", {}).get("style", "bw"))
+    viz.set_style(cfg.get("viz", {}).get("style", "color"))
     ext = out / "extra"
     ext.mkdir(parents=True, exist_ok=True)
 
