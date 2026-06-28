@@ -432,10 +432,24 @@ def _add_cover(doc: Document, project_root: Path, cfg: dict) -> None:
         "湖南": roi_name,
     }
 
-    # 3. Copy paragraphs from cover_doc body into doc, applying replacements
+    # 3. Copy paragraphs: 说明段保留(首页), 说明段后插分页符, 封面信息从第二页第一行起
+    SKIP_KW = ["本文档页", "仅作为示例", "占位符和页面格式", "烦请自行"]
+    seen_note = False
+    page_break_added = False
+    prev_blank = False
     for para in cover_doc.paragraphs:
+        text = para.text.strip()
+        is_note = any(kw in text for kw in SKIP_KW)
+        if is_note:
+            seen_note = True
+        elif seen_note and not page_break_added and text:
+            doc.add_page_break()
+            page_break_added = True
+        is_blank = not text
+        if is_blank and prev_blank:
+            continue
+        prev_blank = is_blank
         new_para = deepcopy(para._element)
-        # Apply text replacements in all runs
         for run_elem in new_para.findall(qn('w:r')):
             for t_elem in run_elem.findall(qn('w:t')):
                 if t_elem.text:
@@ -856,67 +870,27 @@ def _add_appendix_figures(
     figure_state: dict[str, int],
     seen: set[str],
 ) -> None:
-    figures_dir = project_root / "handoff" / "figures"
-    remaining = {path.stem for path in figures_dir.glob("*.png") if path.name not in seen}
-
-    # 统一标题：附录A 输出图件汇总（无论 remaining 是否为空都生成）
+    # 统一标题：附录A 输出图件汇总（无论图多少都生成）
     doc.add_page_break()
     _add_heading(doc, "附录A 输出图件汇总", 2)
 
-    if remaining:
-        for group_title, names in APPENDIX_GROUPS:
-            group_remaining = [name for name in names if name in remaining]
-            if not group_remaining:
-                continue
-            _add_heading(doc, group_title, 3)
-            figures = []
-            for stem in group_remaining:
-                path = _figure_path(project_root, stem)
-                caption = _normalise_figure_caption(path.name, None, captions, roi_name, stats)
-                figures.append((path, caption))
-            _add_figure_group(doc, figures, figure_state, seen)
-            for stem in group_remaining:
-                remaining.discard(stem)
-
-        figures = []
-        for stem in sorted(remaining):
-            path = _figure_path(project_root, stem)
-            caption = _normalise_figure_caption(path.name, None, captions, roi_name, stats)
-            figures.append((path, caption))
-        _add_figure_group(doc, figures, figure_state, seen)
-
-    # ── 附录A 子节：图件清单表格（原附B，合并入附录A）──
-    _add_heading(doc, "图件清单", 3)
-    all_figures = sorted(
-        [path for path in (project_root / "handoff" / "figures").glob("*.png")],
-        key=lambda p: p.stem,
-    )
-    summary_table = doc.add_table(rows=len(all_figures) + 1, cols=3)
-    summary_table.style = "Table Grid"
-    _set_table_geometry(summary_table, [1.0, 3.0, 2.5])
-    # 表头
-    for ci, header in enumerate(["序号", "文件名", "内容"]):
-        cell = summary_table.cell(0, ci)
-        cell.text = header
-        for p in cell.paragraphs:
-            p.paragraph_format.first_line_indent = None
-            for run in p.runs:
-                run.bold = True
-                _format_run(run, BODY_FONT, 9)
-    # 数据行
-    for ri, path in enumerate(all_figures, start=1):
-        caption = _normalise_figure_caption(
-            path.name, None, captions, roi_name, stats,
-        )
-        for ci, text in enumerate([str(ri), path.name, caption]):
-            cell = summary_table.cell(ri, ci)
-            cell.text = text
-            for p in cell.paragraphs:
-                p.paragraph_format.first_line_indent = None
-                p.paragraph_format.space_after = Pt(0)
-                for run in p.runs:
-                    _format_run(run, BODY_FONT, 8)
-    logger.info("附录A 图件清单: %d 张图", len(all_figures))
+    # 每张图独占一行(大显示) + 附录独立编号(图A1起), 不接正文图号(正文已全显所有图)
+    all_figs = sorted((project_root / "handoff" / "figures").glob("*.png"), key=lambda p: p.stem)
+    for idx, path in enumerate(all_figs, start=1):
+        caption = _normalise_figure_caption(path.name, None, captions, roi_name, stats)
+        img_p = doc.add_paragraph()
+        img_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        img_p.paragraph_format.first_line_indent = None
+        img_p.paragraph_format.space_before = Pt(6)
+        img_p.paragraph_format.space_after = Pt(2)
+        img_p.add_run().add_picture(str(path), width=Inches(_image_display_width(path)))
+        cap = doc.add_paragraph()
+        cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cap.paragraph_format.first_line_indent = None
+        cap.paragraph_format.space_after = Pt(8)
+        run = cap.add_run(f"图 A{idx}　{path.stem}　{caption}")
+        _format_run(run, BODY_FONT, 9)
+    logger.info("附录A 图件清单(每行一图大显示, 独立编号A1-A%d): %d 张图", len(all_figs), len(all_figs))
 
 
 def _add_core_code_from_handoff(doc: Document, project_root: Path) -> bool:

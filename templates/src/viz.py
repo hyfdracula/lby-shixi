@@ -213,7 +213,7 @@ def plot_pheno_yearly_lines(years, series, title, out, ylabel="DOY") -> str:
     cmap = _discrete_cmap(len(series))
     markers = ["o", "s", "^", "D"]
     for i, (label, vals) in enumerate(series.items()):
-        ax.plot(years, vals, "-" + markers[i % len(markers)], color=cmap(i),
+        ax.plot(years, vals, "-" + markers[i % len(markers)], color=cmap.colors[i],
                 markerfacecolor="white", markersize=6, lw=2, label=label)
     _title(ax, title); ax.set_xlabel("Year", fontsize=11); ax.set_ylabel(ylabel, fontsize=11)
     _legend_outside(ax)
@@ -275,7 +275,7 @@ def plot_pie_ratios(ratios, labels, title, out) -> str:
     fig, ax = plt.subplots(figsize=(6.5, 6.5))
     cmap = _discrete_cmap(len(ratios))
     ax.pie(ratios, labels=labels, autopct="%1.1f%%",
-           colors=[cmap(i) for i in range(len(ratios))],
+           colors=[cmap.colors[i] for i in range(len(ratios))],
            wedgeprops=dict(edgecolor="white", linewidth=1.5),
            textprops={"fontsize": 10})
     _title(ax, title)
@@ -289,7 +289,7 @@ def plot_veg_bar(veg_names, stacked_values, title, out, ylabel="占比 (%)") -> 
     cmap = _discrete_cmap(len(stacked_values))
     bottom = np.zeros(len(veg_names))
     for i, (cat, vals) in enumerate(stacked_values.items()):
-        ax.bar(x, vals, bottom=bottom, color=cmap(i), edgecolor="black", label=cat)
+        ax.bar(x, vals, bottom=bottom, color=cmap.colors[i], edgecolor="black", label=cat)
         bottom += np.asarray(vals, dtype=float)
     ax.set_xticks(x); ax.set_xticklabels(veg_names, fontsize=11)
     _title(ax, title); ax.set_ylabel(ylabel, fontsize=11)

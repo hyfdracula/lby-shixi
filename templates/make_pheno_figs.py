@@ -54,14 +54,19 @@ def main() -> None:
     # 3) 物候提取示意图(范本图1: 原始NDVI + SG平滑 + 动态阈值线 + SOS/Peak/EOS标注)
     data = Path(cfg["paths"]["data"])
     ratio = cfg.get("phenology", {}).get("threshold_ratio", 0.2)
+    # 选最后一个有效年份(2018-2020 降采样 resample 可能全 NaN)
     y = years[-1]
+    for _yy in reversed(years):
+        _t, _ = load_stack(str(data / "ndvi_smoothed" / f"{_yy}.tif"))
+        if _t.size and not np.isnan(_t).all():
+            y = _yy
+            break
     try:
         raw_stack, _ = load_stack(str(data / "ndvi" / f"{y}.tif"))
         sm_stack, _ = load_stack(str(data / "ndvi_smoothed" / f"{y}.tif"))
-        H, W = sm_stack.shape[1:]
-        ci, cj = H // 2, W // 2
-        raw_ts = raw_stack[:, ci, cj]
-        sm_ts = sm_stack[:, ci, cj]
+        # 用区域均值时序(忽略NaN), 避免单像素落在水体/边界外导致 SOS/EOS=None
+        raw_ts = np.nanmean(raw_stack.reshape(raw_stack.shape[0], -1), axis=1)
+        sm_ts = np.nanmean(sm_stack.reshape(sm_stack.shape[0], -1), axis=1)
         mn, mx = np.nanmin(sm_ts), np.nanmax(sm_ts)
         thr = mn + ratio * (mx - mn)
         above = sm_ts >= thr
@@ -71,7 +76,7 @@ def main() -> None:
         eos_idx = int(last) if last is not None else None
         viz.plot_phenology_diagram(raw_ts, sm_ts, sos_idx, peak_idx, eos_idx,
                                    ratio, str(ph / "phenology_diagram.png"))
-        print(f"出 phenology_diagram.png (SOS≈{sos_idx*16 if sos_idx else '?'}DOY)")
+        print(f"出 phenology_diagram.png (SOS≈{sos_idx*16 if sos_idx is not None else '?'}DOY)")
     except Exception as e:  # noqa: BLE001
         print(f"⚠ phenology_diagram.png 跳过: {e}")
 
