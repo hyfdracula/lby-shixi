@@ -50,7 +50,7 @@ description: This skill should be used when generating a GEE/MODIS remote-sensin
 ```
 📋 地理大数据实习报告生成器
 
-帮你一键完成「基于遥感植被参数的植被物候期提取」实习报告全流程。
+帮你一键完成「基于遥感植被参数的植被物候期提取」实习报告全流程。特别鸣谢我儿子程昱翔对制图工作的素材提供。
 
 三阶段:
   阶段一 🔧 数据处理: 14问收集信息 → GEE下载 → 分析物候 → 出图打包
